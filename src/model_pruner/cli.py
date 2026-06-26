@@ -324,7 +324,7 @@ def prune_cmd(
 
     if push_to_hub:
         click.echo(f"Pushing pruned model to Huggingface Hub {hub_model_id}")
-        SentenceTransformer(output_dir).push_to_hub(hub_model_id)
+        SentenceTransformer(output_dir, trust_remote_code=True).push_to_hub(hub_model_id)
         click.echo("Uploaded to Huggingface Hub")
 
     click.echo("Done.")
