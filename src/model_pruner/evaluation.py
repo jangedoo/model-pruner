@@ -15,7 +15,7 @@ from sentence_transformers.sentence_transformer.evaluation import (
 # Dataset builders
 # ---------------------------------------------------------------------------
 
-SUPPORTED_DATASETS = ["stsb", "nanobeir"]
+SUPPORTED_DATASETS = ["stsb", "nanobeir", "nanobeir_ne"]
 
 
 def _build_stsb_evaluator(split: str = "test") -> EmbeddingSimilarityEvaluator:
@@ -33,6 +33,10 @@ def _build_nanobeir_evaluator() -> NanoBEIREvaluator:
     return NanoBEIREvaluator()
 
 
+def _build_nanobeir_ne_evaluator() -> NanoBEIREvaluator:
+    return NanoBEIREvaluator(dataset_id="jangedoo/NanoBEIR-ne")
+
+
 def _build_evaluators(dataset_names: list[str]) -> dict[str, Any]:
     evaluators = {}
     for name in dataset_names:
@@ -40,6 +44,8 @@ def _build_evaluators(dataset_names: list[str]) -> dict[str, Any]:
             evaluators["stsb"] = _build_stsb_evaluator()
         elif name == "nanobeir":
             evaluators["nanobeir"] = _build_nanobeir_evaluator()
+        elif name == "nanobeir_ne":
+            evaluators["nanobeir_ne"] = _build_nanobeir_ne_evaluator()
         else:
             raise ValueError(f"Unknown dataset '{name}'. Supported: {SUPPORTED_DATASETS}")
     return evaluators
@@ -243,3 +249,38 @@ def evaluate(
         base_metrics=base_metrics,
         pruned_metrics=pruned_metrics,
     )
+
+
+class PrunedQueryBaseDocumentModel:
+    """this is a simple wrapper with uses base_model to encode document and pruned_model
+    to encode query. this is supposed to be used with SentenceTransformer's evaluators.
+    This class replicates typical scenario where a batch job with original model computes
+    the document embeddings where latency is not that important and the pruned model is
+    used to encode user's query on the fly."""
+
+    def __init__(self, base_model: SentenceTransformer, pruned_model: SentenceTransformer):
+        self.base_model = base_model
+        self.pruned_model = pruned_model
+        self.transformers_model = self.pruned_model.transformers_model
+        self.tokenizer = self.pruned_model.tokenizer
+        self.processor = self.pruned_model.processor
+        self.parameters = self.pruned_model.parameters
+
+    @property
+    def model_card_data(self):
+        return self.pruned_model.model_card_data
+
+    def encode(self, inputs, *args, **kwargs):
+        print("encoding inputs using pruned model")
+        return self.pruned_model.encode(inputs, *args, **kwargs)
+
+    def encode_document(self, inputs, *args, **kwargs):
+        print("encoding documents using base model")
+        return self.base_model.encode_document(inputs, *args, **kwargs)
+
+    def encode_query(self, inputs, *args, **kwargs):
+        print("encoding queries using pruned model")
+        return self.pruned_model.encode_query(inputs, *args, **kwargs)
+
+    def evaluate(self, *args, **kwargs):
+        return self.pruned_model.evaluate(*args, **kwargs)
