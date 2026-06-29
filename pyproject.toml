@@ -23,6 +23,7 @@ jupyter = "^1.1.1"
 black = "^26.5.1"
 flake8 = "^7.3.0"
 rope = "^1.14.0"
+ruff = "^0.15.20"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
