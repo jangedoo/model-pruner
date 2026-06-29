@@ -123,7 +123,9 @@ def prune(
 
     print(f"Tokenizer has {len(token_ids):,} vocab size")
 
-    df = grouper(token_ids=token_ids, tokens=tokens, embedding_weights=embedding_weights)
+    df = grouper(
+        token_ids=token_ids, tokens=tokens, embedding_weights=embedding_weights, model=model, tokenizer=tokenizer
+    )
     required_cols = {"token_id", "token", "cluster_id"}
     if not required_cols.issubset(df.columns):
         raise ValueError(
@@ -183,4 +185,4 @@ def prune(
     pruned_tokenizer = cast(PrunedTokenizer, model[0].processor)
     pruned_tokenizer.__class__ = PrunedTokenizer
     pruned_tokenizer.set_id_map(old_token_id_to_pruned_token_id)
-    return old_token_id_to_pruned_token_id
+    return model
