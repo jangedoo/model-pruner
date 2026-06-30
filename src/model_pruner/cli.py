@@ -210,7 +210,8 @@ layers.
 ```python
 from sentence_transformers import SentenceTransformer
 
-model = SentenceTransformer("{pruned_model_id}", trust_remote_code=True)
+model = SentenceTransformer("{pruned_model_id}", 
+                            trust_remote_code=True)
 embeddings = model.encode(["Hello world", "How are you?"])
 ```
 
