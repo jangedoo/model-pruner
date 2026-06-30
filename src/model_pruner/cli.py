@@ -11,7 +11,7 @@ import dotenv
 from sentence_transformers import SentenceTransformer
 
 from model_pruner.evaluation import SUPPORTED_DATASETS, PruningReport
-from model_pruner.evaluation import evaluate as eval_fn
+from model_pruner.evaluation import compare as compare_fn
 from model_pruner.prune.groupers import DBSCANGrouper
 from model_pruner.prune.pruner import prune
 from model_pruner.prune.reducers import ReduceToFirst, ReduceToMean
@@ -37,7 +37,9 @@ def _extract_value(args: list[str], flag: str) -> str | None:
     return None
 
 
-def _annotation_to_click_type(annotation, default=inspect.Parameter.empty) -> click.ParamType:
+def _annotation_to_click_type(
+    annotation, default=inspect.Parameter.empty
+) -> click.ParamType:
     """Map a Python type annotation (or infer from default) to a Click type."""
     if annotation is not inspect.Parameter.empty:
         origin = get_origin(annotation)
@@ -45,11 +47,21 @@ def _annotation_to_click_type(annotation, default=inspect.Parameter.empty) -> cl
             inner = [a for a in get_args(annotation) if a is not type(None)]
             if inner:
                 return _annotation_to_click_type(inner[0])
-        type_map = {int: click.INT, float: click.FLOAT, bool: click.BOOL, str: click.STRING}
+        type_map = {
+            int: click.INT,
+            float: click.FLOAT,
+            bool: click.BOOL,
+            str: click.STRING,
+        }
         if annotation in type_map:
             return type_map[annotation]
     if default is not inspect.Parameter.empty and default is not None:
-        type_map = {int: click.INT, float: click.FLOAT, bool: click.BOOL, str: click.STRING}
+        type_map = {
+            int: click.INT,
+            float: click.FLOAT,
+            bool: click.BOOL,
+            str: click.STRING,
+        }
         if type(default) in type_map:
             return type_map[type(default)]
     return click.STRING
@@ -62,10 +74,15 @@ def _options_from_class(cls: type, prefix: str) -> list[click.Option]:
     for name, param in sig.parameters.items():
         if name == "self":
             continue
-        if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+        if param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
             continue
         flag = f"--{prefix}-{name.replace('_', '-')}"
-        default = param.default if param.default is not inspect.Parameter.empty else None
+        default = (
+            param.default if param.default is not inspect.Parameter.empty else None
+        )
         click_type = _annotation_to_click_type(param.annotation, param.default)
         options.append(
             click.Option(
@@ -82,13 +99,19 @@ def _options_from_class(cls: type, prefix: str) -> list[click.Option]:
 def _resolve(registry: dict, name: str, kind: str) -> type:
     if name not in registry:
         valid = ", ".join(sorted(registry.keys()))
-        raise click.BadParameter(f"Unknown {kind} '{name}'. Valid choices: {valid}", param_hint=f"--{kind}")
+        raise click.BadParameter(
+            f"Unknown {kind} '{name}'. Valid choices: {valid}", param_hint=f"--{kind}"
+        )
     return registry[name]
 
 
 def _extract_prefixed(kwargs: dict, prefix: str) -> dict:
     """Return kwargs whose keys start with prefix, stripped of the prefix. Skips Nones."""
-    return {k[len(prefix) :]: v for k, v in kwargs.items() if k.startswith(prefix) and v is not None}
+    return {
+        k[len(prefix) :]: v
+        for k, v in kwargs.items()
+        if k.startswith(prefix) and v is not None
+    }
 
 
 class PruneCommand(click.Command):
@@ -137,9 +160,9 @@ def _build_stats_section(report: PruningReport) -> str:
 
 | | Base | Pruned | Reduction |
 |---|---:|---:|---:|
-| Vocab size | {s['vocab_size']['base']:,} | {s['vocab_size']['pruned']:,} | {s['vocab_size']['reduction_pct']}% |
-| Total parameters | {s['num_parameters']['base']:,} | {s['num_parameters']['pruned']:,} | {s['num_parameters']['reduction_pct']}% |
-| Embedding parameters | {s['embedding_parameters']['base']:,} | {s['embedding_parameters']['pruned']:,} | {s['embedding_parameters']['reduction_pct']}% |
+| Vocab size | {s["vocab_size"]["base"]:,} | {s["vocab_size"]["pruned"]:,} | {s["vocab_size"]["reduction_pct"]}% |
+| Total parameters | {s["num_parameters"]["base"]:,} | {s["num_parameters"]["pruned"]:,} | {s["num_parameters"]["reduction_pct"]}% |
+| Embedding parameters | {s["embedding_parameters"]["base"]:,} | {s["embedding_parameters"]["pruned"]:,} | {s["embedding_parameters"]["reduction_pct"]}% |
 | Embedding size (MB) | {base_mb:.1f} | {pruned_mb:.1f} | {saving_mb:.1f} MB saved |
 
 ## Evaluation
@@ -155,7 +178,9 @@ def _build_model_card(
     pruned_model_id: str,
     report: PruningReport | None,
 ) -> str:
-    display_name = pruned_model_id.split("/")[-1] if "/" in pruned_model_id else pruned_model_id
+    display_name = (
+        pruned_model_id.split("/")[-1] if "/" in pruned_model_id else pruned_model_id
+    )
     stats_section = _build_stats_section(report) if report else ""
 
     return f"""\
@@ -270,8 +295,47 @@ def cli() -> None:
     type=click.STRING,
     help="Huggingface model ID to use when pushing to hub e.g. jangedoo/my-pruned-model. Requires HF_TOKEN environemnt variable to be set",
 )
+@click.option(
+    "--batch-size",
+    default=None,
+    type=click.INT,
+    help="Batch size for evaluation encoding. Uses evaluator default if omitted.",
+)
+@click.option(
+    "--precision",
+    default="float32",
+    show_default=True,
+    type=click.Choice(["float32", "bf16", "fp16"]),
+    help="Inference precision for evaluation. 'bf16' auto-detects support.",
+)
+@click.option(
+    "--device",
+    default=None,
+    type=click.STRING,
+    help="Device for evaluation (e.g. 'cuda', 'cpu'). Auto-detected if omitted.",
+)
+@click.option(
+    "--no-progress-bar",
+    is_flag=True,
+    default=False,
+    help="Disable tqdm progress bars during evaluation.",
+)
 def prune_cmd(
-    model, output_dir, grouper, reducer, preserve, run_eval, dataset, report_output, push_to_hub, hub_model_id, **kwargs
+    model,
+    output_dir,
+    grouper,
+    reducer,
+    preserve,
+    run_eval,
+    dataset,
+    report_output,
+    push_to_hub,
+    hub_model_id,
+    batch_size,
+    precision,
+    device,
+    no_progress_bar,
+    **kwargs,
 ):
     """Prune the vocabulary of a SentenceTransformer model.
 
@@ -285,7 +349,9 @@ def prune_cmd(
     reducer_instance = reducer_cls(**_extract_prefixed(kwargs, "reducer_"))
 
     if push_to_hub and "HF_TOKEN" not in os.environ:
-        raise ValueError(f"push to hub is enabled but no huggingface token (HF_TOKEN) found in environment variables.")
+        raise ValueError(
+            f"push to hub is enabled but no huggingface token (HF_TOKEN) found in environment variables."
+        )
     if push_to_hub and not hub_model_id:
         raise ValueError(
             f"push to hub is enabled but hub model id was not passed. Pass it using --hub-model-id 'username/my-pruned-model'"
@@ -307,10 +373,14 @@ def prune_cmd(
     report = None
     if run_eval:
         click.echo("Evaluating model")
-        report = eval_fn(
+        report = compare_fn(
             base_model=model,
             pruned_model=output_dir,
             dataset_names=list(dataset) or None,
+            batch_size=batch_size,
+            show_progress_bar=not no_progress_bar,
+            precision=precision,
+            device=device,
         )
         report.print_summary()
         if report_output:
@@ -319,12 +389,18 @@ def prune_cmd(
             click.echo(f"Report saved to {report_output}")
 
     (Path(output_dir) / "README.md").write_text(
-        _build_model_card(model, pruned_model_id=hub_model_id if push_to_hub else output_dir, report=report)
+        _build_model_card(
+            model,
+            pruned_model_id=hub_model_id if push_to_hub else output_dir,
+            report=report,
+        )
     )
 
     if push_to_hub:
         click.echo(f"Pushing pruned model to Huggingface Hub {hub_model_id}")
-        SentenceTransformer(output_dir, trust_remote_code=True).push_to_hub(hub_model_id)
+        SentenceTransformer(output_dir, trust_remote_code=True).push_to_hub(
+            hub_model_id
+        )
         click.echo("Uploaded to Huggingface Hub")
 
     click.echo("Done.")
@@ -353,17 +429,56 @@ def prune_cmd(
     type=click.Path(dir_okay=False, writable=True),
     help="Path to save JSON report.",
 )
-def evaluate_cmd(base_model, pruned_model, dataset, no_trust_remote_code, output):
+@click.option(
+    "--batch-size",
+    default=None,
+    type=click.INT,
+    help="Batch size for evaluation encoding. Uses evaluator default if omitted.",
+)
+@click.option(
+    "--precision",
+    default="float32",
+    show_default=True,
+    type=click.Choice(["float32", "bf16", "fp16"]),
+    help="Inference precision for evaluation. 'bf16' auto-detects support.",
+)
+@click.option(
+    "--device",
+    default=None,
+    type=click.STRING,
+    help="Device for evaluation (e.g. 'cuda', 'cpu'). Auto-detected if omitted.",
+)
+@click.option(
+    "--no-progress-bar",
+    is_flag=True,
+    default=False,
+    help="Disable tqdm progress bars during evaluation.",
+)
+def evaluate_cmd(
+    base_model,
+    pruned_model,
+    dataset,
+    no_trust_remote_code,
+    output,
+    batch_size,
+    precision,
+    device,
+    no_progress_bar,
+):
     """Compare a base model against its pruned counterpart.
 
     BASE_MODEL is a Hugging Face model ID or local path.
     PRUNED_MODEL is a local path or Hugging Face model ID.
     """
-    report = eval_fn(
+    report = compare_fn(
         base_model=base_model,
         pruned_model=pruned_model,
         dataset_names=list(dataset) or None,
         trust_remote_code=not no_trust_remote_code,
+        batch_size=batch_size,
+        show_progress_bar=not no_progress_bar,
+        precision=precision,
+        device=device,
     )
     report.print_summary()
     if output:
