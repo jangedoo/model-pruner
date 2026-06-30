@@ -38,9 +38,15 @@ class TokenGrouper(abc.ABC):
         tokenizer: PreTrainedTokenizerFast,
     ) -> pd.DataFrame:
         cluster_ids = self.group(
-            token_ids=token_ids, tokens=tokens, embedding_weights=embedding_weights, model=model, tokenizer=tokenizer
+            token_ids=token_ids,
+            tokens=tokens,
+            embedding_weights=embedding_weights,
+            model=model,
+            tokenizer=tokenizer,
         )
-        return pd.DataFrame({"token_id": token_ids, "token": tokens, "cluster_id": cluster_ids})
+        return pd.DataFrame(
+            {"token_id": token_ids, "token": tokens, "cluster_id": cluster_ids}
+        )
 
 
 class DBSCANGrouper(TokenGrouper):
@@ -57,15 +63,23 @@ class DBSCANGrouper(TokenGrouper):
         model: SentenceTransformer,
         tokenizer: PreTrainedTokenizerFast,
     ):
-        cluster_ids = DBSCAN(eps=self.eps, min_samples=self.min_samples, metric=self.metric, n_jobs=-1).fit_predict(
-            embedding_weights.numpy()
-        )
+        # for miltilingual-e5-small, the embedding_weights has more rows than number of tokens
+        # there seems to be 37 extra rows. so we only select the embeddings for the given token ids
+        token_embeddings = embedding_weights[token_ids]
+        cluster_ids = DBSCAN(
+            eps=self.eps, min_samples=self.min_samples, metric=self.metric, n_jobs=-1
+        ).fit_predict(token_embeddings.numpy())
         return cluster_ids
 
 
 class DomainGrouper(TokenGrouper):
     def __init__(
-        self, dataset_name: str, subset: str | None, split: str, max_rows: int = 100000, text_column: str = "text"
+        self,
+        dataset_name: str,
+        subset: str | None,
+        split: str,
+        max_rows: int = 100000,
+        text_column: str = "text",
     ):
         self.corpus_ds = (
             datasets.load_dataset(
@@ -91,10 +105,14 @@ class DomainGrouper(TokenGrouper):
         tokenizer: PreTrainedTokenizerFast,
     ) -> np.ndarray:
         self.domain_token_ids = set(tokenizer.all_special_ids)
-        print(f"initial domain token ids using special tokens ids of the tokenizer: {self.domain_token_ids}")
+        print(
+            f"initial domain token ids using special tokens ids of the tokenizer: {self.domain_token_ids}"
+        )
 
         for batch in self.corpus_ds.take(self.max_rows).batch(batch_size=128):
-            token_ids_list = [e.ids for e in tokenizer.backend_tokenizer.encode_batch(batch["text"])]
+            token_ids_list = [
+                e.ids for e in tokenizer.backend_tokenizer.encode_batch(batch["text"])
+            ]
             for ids in token_ids_list:
                 self.domain_token_ids.update(ids)
 
@@ -112,7 +130,12 @@ class DomainGrouper(TokenGrouper):
 
     @classmethod
     def english_domain(cls, max_rows=100_000):
-        return cls(dataset_name="HuggingFaceFW/fineweb-edu", subset="sample-10BT", split="train", max_rows=max_rows)
+        return cls(
+            dataset_name="HuggingFaceFW/fineweb-edu",
+            subset="sample-10BT",
+            split="train",
+            max_rows=max_rows,
+        )
 
 
 class DomainPlusClusterGrouper(TokenGrouper):
@@ -129,23 +152,30 @@ class DomainPlusClusterGrouper(TokenGrouper):
         tokenizer: PreTrainedTokenizerFast,
     ) -> np.ndarray:
         domain_clusters_df = self.domain_grouper(
-            token_ids=token_ids, tokens=tokens, embedding_weights=embedding_weights, model=model, tokenizer=tokenizer
+            token_ids=token_ids,
+            tokens=tokens,
+            embedding_weights=embedding_weights,
+            model=model,
+            tokenizer=tokenizer,
         )
         # we only need to cluster the tokens which are not out_of_domain_cluster_id
         out_of_domain_cluster_id = self.domain_grouper.out_of_domain_cluster_id
 
         # this df[token, token_id, cluster_id] contains tokens which are in-domain
-        in_domain_clusters_df = domain_clusters_df.query("cluster_id != @out_of_domain_cluster_id")
-        print(f"only clustering {len(in_domain_clusters_df):,} tokens which are in-domain")
+        in_domain_clusters_df = domain_clusters_df.query(
+            "cluster_id != @out_of_domain_cluster_id"
+        )
+        print(
+            f"only clustering {len(in_domain_clusters_df):,} tokens which are in-domain"
+        )
 
         in_domain_token_ids = in_domain_clusters_df["token_id"].tolist()
         in_domain_tokens = in_domain_clusters_df["token"].tolist()
-        in_domain_embedding_weights = embedding_weights[in_domain_token_ids]
 
         semantic_cluster_ids = self.cluster_grouper(
             token_ids=in_domain_token_ids,
             tokens=in_domain_tokens,
-            embedding_weights=in_domain_embedding_weights,
+            embedding_weights=embedding_weights,
             model=model,
             tokenizer=tokenizer,
         )["cluster_id"].values
