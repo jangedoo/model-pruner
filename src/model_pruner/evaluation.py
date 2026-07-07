@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 Precision = Literal["float32", "bf16", "fp16"]
 
 
-SUPPORTED_DATASETS = ["stsb", "nanobeir", "nanobeir_ne"]
+SUPPORTED_DATASETS = ["stsb", "stsb_ne", "nanobeir", "nanobeir_ne"]
 
 
 def _build_stsb_evaluator(
@@ -36,6 +36,32 @@ def _build_stsb_evaluator(
         "scores": ds["score"],
         "main_similarity": SimilarityFunction.COSINE,
         "name": "stsb",
+        "show_progress_bar": show_progress_bar,
+    }
+    if batch_size is not None:
+        kwargs["batch_size"] = batch_size
+    if precision is not None:
+        kwargs["precision"] = precision
+    if truncate_dim is not None:
+        kwargs["truncate_dim"] = truncate_dim
+    return EmbeddingSimilarityEvaluator(**kwargs)
+
+
+def _build_stsb_ne_evaluator(
+    split: str = "test",
+    *,
+    show_progress_bar: bool = True,
+    batch_size: int | None = None,
+    precision: Precision | None = None,
+    truncate_dim: int | None = None,
+) -> EmbeddingSimilarityEvaluator:
+    ds = datasets.load_dataset("jangedoo/stsb_nepali", split=split)
+    kwargs: dict[str, Any] = {
+        "sentences1": ds["sentence1_ne"],
+        "sentences2": ds["sentence2_ne"],
+        "scores": ds["score"],
+        "main_similarity": SimilarityFunction.COSINE,
+        "name": "stsb_ne",
         "show_progress_bar": show_progress_bar,
     }
     if batch_size is not None:
@@ -90,8 +116,16 @@ def _build_evaluators(
 ) -> dict[str, Any]:
     evaluators = {}
     for name in dataset_names:
+        print(f"building evaluator for dataset {name}")
         if name == "stsb":
             evaluators["stsb"] = _build_stsb_evaluator(
+                show_progress_bar=show_progress_bar,
+                batch_size=batch_size,
+                precision=precision,
+                truncate_dim=truncate_dim,
+            )
+        elif name == "stsb_ne":
+            evaluators["stsb_ne"] = _build_stsb_ne_evaluator(
                 show_progress_bar=show_progress_bar,
                 batch_size=batch_size,
                 precision=precision,
