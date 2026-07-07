@@ -88,10 +88,13 @@ model-pruner prune \
     --hub-model-id "jangedoo/embeddinggemma-300m-ne-pruned" \
     "google/embeddinggemma-300m" \
     "./pruned/embeddinggemma-300m-ne-pruned"       
+```
 
 ## Evaluate
 There are two datasets currently available to evaluate: stsb and nanobeir. You can compare the base model and pruned model using the following command.
-```
+
+
+```bash
 model-pruner evaluate --dataset stsb --dataset nanobeir "sentence-transformers/all-MiniLM-L6-v2" "./pruned/all-MiniLM-L6-v2-pruned"
 
 model-pruner evaluate --dataset stsb --dataset nanobeir --dataset nanobeir_ne "sentence-transformers/all-MiniLM-L6-v2" "jangedoo/all-MiniLM-L6-v2-pruned" --output ./minilm_eval.json
