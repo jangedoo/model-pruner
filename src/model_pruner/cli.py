@@ -12,13 +12,14 @@ from sentence_transformers import SentenceTransformer
 
 from model_pruner.evaluation import SUPPORTED_DATASETS, PruningReport
 from model_pruner.evaluation import compare as compare_fn
-from model_pruner.prune.groupers import DBSCANGrouper
+from model_pruner.prune.groupers import DBSCANGrouper, DomainGrouper
 from model_pruner.prune.pruner import prune
 from model_pruner.prune.reducers import ReduceToFirst, ReduceToMean
 
 dotenv.load_dotenv()
 GROUPER_REGISTRY: dict[str, type] = {
     "dbscan": DBSCANGrouper,
+    "domain": DomainGrouper,
 }
 
 REDUCER_REGISTRY: dict[str, type] = {
