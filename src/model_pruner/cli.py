@@ -230,7 +230,7 @@ If you use this model or the pruning approach, please cite:
   author = {{Sanjaya Subedi}},
   title  = {{Token Embedding Pruning for Sentence Transformers}},
   year   = {{2026}},
-  note   = {{Available at: [link to be added upon publication]}}
+  note   = {{Available at: https://sanjayasubedi.com.np/deeplearning/shrinking-embedding-models-by-pruning-vocabulary/}}
 }}
 ```
 """
